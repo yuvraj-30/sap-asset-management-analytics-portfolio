@@ -6,7 +6,7 @@
 ## 🎯 Alignment with Job Requirements
 This repository demonstrates technical competency in **SAP Enterprise Asset Management (EAM)**, directly supporting the accountabilities outlined in the DOC position description:
 
-| [cite_start]DOC Accountability Area  | My Solution / Demonstration |
+| DOC Accountability Area  | My Solution / Demonstration |
 | :--- | :--- |
 | **EAM Master Data Coordinator** | **`z_pm_asset_master_extract.abap`**<br>Automated validation of Functional Locations (`IFLOT`) and Equipment (`EQUI`) to ensure hierarchy completeness. |
 | **System and Process Improvement** | **Data Quality Rules Engine**<br>Replaces manual error-checking with automated scripts that "triage" data faults instantly (e.g., finding orphan assets). |
