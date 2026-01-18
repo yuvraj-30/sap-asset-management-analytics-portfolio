@@ -31,8 +31,9 @@ define view entity Z_C_PM_COMPLIANCE_KPIS
   @EndUserText.label: 'Due Soon (30d)'
   sum(
     case
+      /* FIXED: Used 'NULL' for safe fail handling in dats_add_days */
       when PlannedFinishDate between $session.system_date 
-                             and dats_add_days($session.system_date, 30, 'FAIL') then 1
+                             and dats_add_days($session.system_date, 30, 'NULL') then 1
       else 0
     end
   ) as DueSoonItems
