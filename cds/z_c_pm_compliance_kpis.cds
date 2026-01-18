@@ -31,7 +31,7 @@ define view entity Z_C_PM_COMPLIANCE_KPIS
   @EndUserText.label: 'Due Soon (30d)'
   sum(
     case
-      /* FIXED: Used 'NULL' for safe fail handling in dats_add_days */
+      /* CRITICAL FIX: Safe date math. Returns NULL if calculation fails. */
       when PlannedFinishDate between $session.system_date 
                              and dats_add_days($session.system_date, 30, 'NULL') then 1
       else 0
