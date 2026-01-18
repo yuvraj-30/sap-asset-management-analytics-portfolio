@@ -45,28 +45,23 @@ START-OF-SELECTION.
   ls_kpi-period_from = p_from.
   ls_kpi-period_to   = p_to.
 
-  " 1) Overdue / due soon based on MPOS planned finish
-  SELECT COUNT(*)
-    FROM mpos
-    INTO @ls_kpi-overdue_pm_items
+  " 1) Overdue / Due Soon - Querying MHIS (Maintenance Plan Calls/History)
+  " Note: NPLDO is the 'Planned Date' in Maintenance Scheduling
+  SELECT 
+    COUNT( CASE WHEN npldo < @sy-datum THEN 1 END ) AS overdue,
+    COUNT( CASE WHEN npldo BETWEEN @sy-datum AND @( sy-datum + 30 ) THEN 1 END ) AS due_soon
+    FROM mhis
     WHERE iwerk = @p_werks
-      AND gltrp IS NOT NULL
-      AND gltrp < @sy-datum.
+      AND tstat = ' ' " Status: Called/Scheduled (not skipped/completed)
+    INTO (@ls_kpi-overdue_pm_items, @ls_kpi-due_soon_pm_items).
 
-  SELECT COUNT(*)
-    FROM mpos
-    INTO @ls_kpi-due_soon_pm_items
-    WHERE iwerk = @p_werks
-      AND gltrp IS NOT NULL
-      AND gltrp BETWEEN @sy-datum AND @sy-datum + 30.
-
-  " 2) Open critical notifications (illustrative priority field)
-  "    In real systems, use status tables and custom priority definitions.
+  " 2) Open critical notifications (Priority 1 and not marked as 'Completed')
   SELECT COUNT(*)
     FROM qmel
-    INTO @ls_kpi-open_notif_crit
     WHERE iwerk = @p_werks
-      AND priok = '1'.
+      AND priok = '1'
+      AND qmstat = '1' " Typical check for 'Outstanding' status
+    INTO @ls_kpi-open_notif_crit.
 
   " 3) Orders created in period
   SELECT COUNT(*)
@@ -74,27 +69,21 @@ START-OF-SELECTION.
     INTO @ls_kpi-orders_created
     WHERE erdat BETWEEN @p_from AND @p_to.
 
-  " 4) Orders closed in period (illustrative: basic completion date)
-  "    Many systems track TECO/CLSD via JEST/JCDS; this is a portfolio simplification.
-  SELECT COUNT(*)
-    FROM afih
-    INTO @ls_kpi-orders_closed
-    WHERE iwerk = @p_werks
-      AND isdd BETWEEN @p_from AND @p_to.
+  " 3) & 4) Orders Created and Closed (Using AFIH to ensure Plant filter)
+  " Joining AUFK (Header) with AFIH (Plant Info)
+  SELECT 
+    COUNT( CASE WHEN a~erdat BETWEEN @p_from AND @p_to THEN 1 END ) AS created,
+    COUNT( CASE WHEN i~isdd  BETWEEN @p_from AND @p_to THEN 1 END ) AS closed
+    FROM aufk AS a
+    INNER JOIN afih AS i ON a~aufnr = i~aufnr
+    WHERE i~iwerk = @p_werks
+    INTO (@ls_kpi-orders_created, @ls_kpi-orders_closed).
 
   PERFORM print_kpi USING ls_kpi.
 
 FORM print_kpi USING is_kpi TYPE ty_kpi.
-  ULINE.
-  WRITE: / 'PM Compliance KPI Summary'.
-  ULINE.
-  WRITE: / 'Plant:', is_kpi-plant.
-  WRITE: / 'Period:', is_kpi-period_from, 'to', is_kpi-period_to.
-  ULINE.
-  WRITE: / 'Overdue PM items:', is_kpi-overdue_pm_items.
-  WRITE: / 'Due soon PM items (next 30 days):', is_kpi-due_soon_pm_items.
-  WRITE: / 'Open critical notifications:', is_kpi-open_notif_crit.
-  WRITE: / 'Orders created:', is_kpi-orders_created.
-  WRITE: / 'Orders closed:', is_kpi-orders_closed.
-  ULINE.
+  " Using the newer CL_DEMO_OUTPUT for a cleaner results window in 2026
+  cl_demo_output=>begin_section( 'PM Compliance KPI Summary' ).
+  cl_demo_output=>write_data( is_kpi ).
+  cl_demo_output=>display( ).
 ENDFORM.
