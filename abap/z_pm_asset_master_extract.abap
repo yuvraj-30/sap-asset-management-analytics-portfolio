@@ -26,7 +26,7 @@ PARAMETERS: p_werks TYPE werks_d OBLIGATORY DEFAULT '0001',
 
 TYPES: BEGIN OF ty_func_loc,
          tplnr   TYPE iflot-tplnr,
-         pltxt   TYPE iflot-pltxt,
+         pltxt   TYPE iflotx-pltxt,
          iwerk   TYPE iflot-iwerk,
          stort   TYPE iflot-stort,
          ingrp   TYPE iflot-ingrp,
@@ -38,7 +38,7 @@ TYPES: BEGIN OF ty_func_loc,
 
 TYPES: BEGIN OF ty_equip,
          equnr   TYPE equi-equnr,
-         eqktx   TYPE equi-eqktx,
+         eqktx   TYPE eqkt-eqktx,
          tplnr   TYPE equi-tplnr,
          werks   TYPE equi-werks,
          stort   TYPE equi-stort,
@@ -65,20 +65,18 @@ DATA: lt_floc TYPE STANDARD TABLE OF ty_func_loc,
 START-OF-SELECTION.
 
   " 1) Extract functional locations for a plant
-  SELECT tplnr, pltxt, iwerk, stort, ingrp, tplma, datuv, datub, objnr
-    FROM iflot
-    INTO TABLE @lt_floc
-    WHERE iwerk = @p_werks.
+  SELECT f~tplnr, x~pltxt, f~iwerk, f~stort, f~ingrp, f~tplma, f~objnr
+    FROM iflot AS f
+    LEFT JOIN iflotx AS x ON f~tplnr = x~tplnr AND x~spras = @sy-langu
+    WHERE f~iwerk = @p_werks
+    INTO TABLE @lt_floc.
 
   " 2) Extract equipment for a plant
-  SELECT equnr, eqktx, tplnr, werks, stort, herst, typbz, sernr, objnr, inbdt, aedat
-    FROM equi
-    INTO TABLE @lt_equi
-    WHERE werks = @p_werks.
-
-  " 3) Optional filter: exclude inactive assets (portfolio pattern)
-  "    In practice, you would filter by status tables (JEST/JCDS) or custom flags.
-  "    Here, we only demonstrate the pattern.
+  SELECT e~equnr, t~eqktx, e~tplnr, e~werks, e~stort, e~herst, e~typbz, e~sernr, e~objnr
+    FROM equi AS e
+    LEFT JOIN eqkt AS t ON e~equnr = t~equnr AND t~spras = @sy-langu
+    WHERE e~werks = @p_werks
+    INTO TABLE @lt_equi.
 
   " 4) Data Quality Checks
   PERFORM dq_check_floc USING lt_floc CHANGING lt_dq.
@@ -88,11 +86,10 @@ START-OF-SELECTION.
   " 5) Output
   PERFORM print_summary USING lt_floc lt_equi lt_dq.
 
-FORM dq_check_floc USING it_floc TYPE STANDARD TABLE CHANGING ct_dq TYPE STANDARD TABLE.
-  FIELD-SYMBOLS: <f> TYPE ty_func_loc.
-  LOOP AT it_floc ASSIGNING <f>.
+FORM dq_check_floc CHANGING ct_dq TYPE STANDARD TABLE.
+  LOOP AT it_floc ASSIGNING FIELD-SYMBOLS <f>.
     IF <f>-tplnr IS INITIAL.
-      APPEND VALUE ty_dq_issue(
+      APPEND VALUE #(
         object_type = 'FUNC_LOC'
         object_id   = '(missing tplnr)'
         severity    = 'ERROR'
@@ -100,7 +97,7 @@ FORM dq_check_floc USING it_floc TYPE STANDARD TABLE CHANGING ct_dq TYPE STANDAR
         message     = 'Functional Location missing TPLNR.' ) TO ct_dq.
     ENDIF.
     IF <f>-pltxt IS INITIAL.
-      APPEND VALUE ty_dq_issue(
+      APPEND VALUE #(
         object_type = 'FUNC_LOC'
         object_id   = <f>-tplnr
         severity    = 'WARN'
@@ -108,7 +105,7 @@ FORM dq_check_floc USING it_floc TYPE STANDARD TABLE CHANGING ct_dq TYPE STANDAR
         message     = 'Functional Location missing description (PLTXT).' ) TO ct_dq.
     ENDIF.
     IF <f>-tplma IS NOT INITIAL AND <f>-tplma = <f>-tplnr.
-      APPEND VALUE ty_dq_issue(
+      APPEND VALUE #(
         object_type = 'FUNC_LOC'
         object_id   = <f>-tplnr
         severity    = 'ERROR'
@@ -122,7 +119,7 @@ FORM dq_check_equi USING it_equi TYPE STANDARD TABLE CHANGING ct_dq TYPE STANDAR
   FIELD-SYMBOLS: <e> TYPE ty_equip.
   LOOP AT it_equi ASSIGNING <e>.
     IF <e>-equnr IS INITIAL.
-      APPEND VALUE ty_dq_issue(
+      APPEND VALUE #(
         object_type = 'EQUIPMENT'
         object_id   = '(missing equnr)'
         severity    = 'ERROR'
@@ -130,7 +127,7 @@ FORM dq_check_equi USING it_equi TYPE STANDARD TABLE CHANGING ct_dq TYPE STANDAR
         message     = 'Equipment missing EQUNR.' ) TO ct_dq.
     ENDIF.
     IF <e>-eqktx IS INITIAL.
-      APPEND VALUE ty_dq_issue(
+      APPEND VALUE #(
         object_type = 'EQUIPMENT'
         object_id   = <e>-equnr
         severity    = 'WARN'
@@ -138,7 +135,7 @@ FORM dq_check_equi USING it_equi TYPE STANDARD TABLE CHANGING ct_dq TYPE STANDAR
         message     = 'Equipment missing description (EQKTX).' ) TO ct_dq.
     ENDIF.
     IF <e>-tplnr IS INITIAL.
-      APPEND VALUE ty_dq_issue(
+      APPEND VALUE #(
         object_type = 'EQUIPMENT'
         object_id   = <e>-equnr
         severity    = 'WARN'
@@ -161,7 +158,7 @@ FORM dq_check_orphans USING it_floc TYPE STANDARD TABLE it_equi TYPE STANDARD TA
 
   LOOP AT it_equi ASSIGNING <e>.
     IF <e>-tplnr IS NOT INITIAL AND line_exists( lt_floc_keys[ table_line = <e>-tplnr ] ) = abap_false.
-      APPEND VALUE ty_dq_issue(
+      APPEND VALUE #(
         object_type = 'EQUIPMENT'
         object_id   = <e>-equnr
         severity    = 'ERROR'
